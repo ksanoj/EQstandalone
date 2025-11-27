@@ -4,6 +4,48 @@ A collection of standalone Lua scripts for EverQuest that don't fit anywhere els
 
 ## Scripts
 
+### 🤖 Killbot (`killbot.lua`)
+
+An automated mob farming script with a graphical user interface. Originally a macro by Rogue601, converted to Lua.
+
+![Killbot GUI](images/killbot_gui.PNG)
+
+**Features:**
+- Farms specific mobs defined in a configuration file (`farm.ini`)
+- ImGui-based GUI control panel
+- Configurable search radius
+- Automatic navigation using MQ2Nav
+- XTarget awareness for handling aggro
+- Auto-stick and attack functionality
+
+**Requirements:**
+- MQ2Nav with valid mesh for the zone
+
+**Usage:**
+```
+/lua run killbot
+```
+
+**Configuration:**
+
+Create a `farm.ini` file in your MacroQuest `lua` directory with zone sections and mob names. Set the value to `1` to enable hunting that mob:
+
+```ini
+[eastwastes]
+a_tundra_kodiak=1
+a_dire_wolf=1
+a_tundra_mammoth=1
+```
+
+**GUI Controls:**
+- **Search Radius** - Set the detection range for mobs
+- **Start Hunting** - Begin the farming loop
+- **Stop Hunting** - Stop farming and clear targets
+- **Reload farm.ini** - Reload the configuration without restarting
+- **Exit Script** - Terminates the script
+
+---
+
 ### 🐾 Sentry (`sentry.lua`)
 
 An automated pet attack script with a graphical user interface. 
