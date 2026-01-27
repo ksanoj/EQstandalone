@@ -103,6 +103,7 @@ A togglable GUI to display missing buffs across toons with multi-character suppo
 
 **Features:**
 - Monitors missing buffs across all running characters
+- Clickable GUI, click to select specific characters
 - ImGui-based GUI with minimizable interface
 - Shows character name, zone, and missing buffs
 - Class-specific buff filtering (shows only relevant buffs for each class)
