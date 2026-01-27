@@ -95,6 +95,35 @@ A debugging tool for monitoring NPC spawns within a configurable radius.
 
 ---
 
+### 📋 Missing Buff Monitor (`rdmissbuff.lua`)
+
+A togglable GUI to display missing buffs across toons with multi-character support.
+
+![Missing Buff Monitor GUI](images/missbuff_gui.png)
+
+**Features:**
+- Monitors missing buffs across all running characters
+- ImGui-based GUI with minimizable interface
+- Shows character name, zone, and missing buffs
+- Class-specific buff filtering (shows only relevant buffs for each class)
+- Multi-character communication using Actors system
+- Broadcasts buff status every 5 seconds
+- Clickable character names to switch windows
+- Auto-cleanup of offline characters (30 second timeout)
+- Collapsible mini button for quick access
+
+**Usage:**
+```
+/lua run rdmissbuff
+```
+
+**GUI Controls:**
+- **Mini Button** - Click to toggle main window visibility
+- **Character Names** - Click to bring that character's window to foreground
+- **Main Window** - Shows all missing buffs organized by character
+
+---
+
 ## Requirements
 
 - [MacroQuest](https://www.macroquest.org/)
