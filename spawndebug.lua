@@ -10,7 +10,7 @@ local config = {
 
 local state = {
     spawns = {}, -- List of detected spawns {id, name, distance, timestamp}
-    knownSpawns = {}, -- Set of spawn IDs we've already logged
+    knownSpawns = {}, 
     pollThread = nil,
 }
 
@@ -92,8 +92,9 @@ local function drawGui()
     ImGui.Text(string.format("Spawns Detected: %d", #state.spawns))
     ImGui.Separator()
     
-    if ImGui.BeginTable("SpawnTable", 4, ImGuiTableFlags.Borders + ImGuiTableFlags.RowBg + ImGuiTableFlags.ScrollY) then
+    if ImGui.BeginTable("SpawnTable", 5, ImGuiTableFlags.Borders + ImGuiTableFlags.RowBg + ImGuiTableFlags.ScrollY) then
         ImGui.TableSetupColumn("ID", ImGuiTableColumnFlags.WidthFixed, 60)
+        ImGui.TableSetupColumn("Copy", ImGuiTableColumnFlags.WidthFixed, 40)
         ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch)
         ImGui.TableSetupColumn("Distance", ImGuiTableColumnFlags.WidthFixed, 70)
         ImGui.TableSetupColumn("Time", ImGuiTableColumnFlags.WidthFixed, 70)
@@ -108,12 +109,17 @@ local function drawGui()
             ImGui.Text(tostring(spawn.id))
             
             ImGui.TableSetColumnIndex(1)
-            ImGui.Text(spawn.name)
+            if ImGui.SmallButton("Copy##" .. i) then
+                ImGui.SetClipboardText(spawn.name)
+            end
             
             ImGui.TableSetColumnIndex(2)
-            ImGui.Text(spawn.distance)
+            ImGui.Text(spawn.name)
             
             ImGui.TableSetColumnIndex(3)
+            ImGui.Text(spawn.distance)
+            
+            ImGui.TableSetColumnIndex(4)
             ImGui.Text(spawn.timestamp)
         end
         
