@@ -1,8 +1,4 @@
---[[
-DPS and Heal parser. 
 
-By: Noobjuice
-]]
 local mq = require('mq')
 local imgui = require('ImGui')
 local iam = require('ImAnim')
@@ -60,6 +56,10 @@ local fightHistory = {}
 local MAX_HISTORY = 50
 
 local animState = {}
+
+-- Pet assignment system (session-level, persists across fights)
+local petAssignments = {}    -- petName -> ownerName
+local autoDetectCache = {}   -- petName -> ownerName or false (false = checked, not a pet)
 
 local function getAnimState(name)
     if not animState[name] then
@@ -203,10 +203,74 @@ end
 
 local function petOwner(name)
     if not name then return nil end
-    return name:match("^(.+)`s pet$")
+    -- Pattern match first ("Somename`s pet")
+    local owner = name:match("^(.+)`s pet$")
         or name:match("^(.+)´s pet$")
         or name:match("^(.+)'s pet$")
         or name:match("^(.+)'s pet$")
+    if owner then return owner end
+    -- Check manual/auto assignments
+    return petAssignments[name] or nil
+end
+
+local function tryAutoDetectPetOwner(name)
+    if not name then return nil end
+    -- Already checked this name
+    if autoDetectCache[name] ~= nil then
+        return autoDetectCache[name] or nil  -- false -> nil
+    end
+    -- Already assigned manually
+    if petAssignments[name] then
+        autoDetectCache[name] = petAssignments[name]
+        return petAssignments[name]
+    end
+    -- Try MQ Spawn TLO
+    local spawn = mq.TLO.Spawn(name)
+    if spawn and spawn() and spawn.Type() == "Pet" then
+        local master = spawn.Master
+        if master and master.CleanName() then
+            local ownerName = master.CleanName()
+            autoDetectCache[name] = ownerName
+            petAssignments[name] = ownerName
+            return ownerName
+        end
+    end
+    autoDetectCache[name] = false  -- mark as checked, not a pet
+    return nil
+end
+
+local function mergePetIntoOwner(fight, petName, ownerName)
+    if not fight or not fight.players[petName] then return end
+    local petData = fight.players[petName]
+    local ownerData = fight.players[ownerName]
+    if not ownerData then
+        ownerData = newPlayerData()
+        fight.players[ownerName] = ownerData
+    end
+    ownerData.totalDmg = ownerData.totalDmg + petData.totalDmg
+    ownerData.meleeDmg = ownerData.meleeDmg + petData.meleeDmg
+    ownerData.spellDmg = ownerData.spellDmg + petData.spellDmg
+    ownerData.dsDmg    = ownerData.dsDmg    + petData.dsDmg
+    ownerData.hits     = ownerData.hits     + petData.hits
+    ownerData.hasPets  = true
+    if petData.firstHit then
+        ownerData.firstHit = ownerData.firstHit and math.min(ownerData.firstHit, petData.firstHit) or petData.firstHit
+    end
+    if petData.lastHit then
+        ownerData.lastHit = ownerData.lastHit and math.max(ownerData.lastHit, petData.lastHit) or petData.lastHit
+    end
+    fight.players[petName] = nil
+end
+
+local function getAssignedPets(ownerName)
+    local pets = {}
+    for petName, owner in pairs(petAssignments) do
+        if owner == ownerName then
+            table.insert(pets, petName)
+        end
+    end
+    table.sort(pets)
+    return pets
 end
 
 local function onOtherMelee(line, attacker, verb, target, dmgStr)
@@ -218,7 +282,13 @@ local function onOtherMelee(line, attacker, verb, target, dmgStr)
     if owner then
         recordMeleeDamage(owner, dmg, true)
     else
-        recordMeleeDamage(attacker, dmg, false)
+        -- Try auto-detect before recording under the attacker's own name
+        local detected = tryAutoDetectPetOwner(attacker)
+        if detected then
+            recordMeleeDamage(detected, dmg, true)
+        else
+            recordMeleeDamage(attacker, dmg, false)
+        end
     end
 end
 
@@ -238,7 +308,12 @@ local function onOtherSpell(line, attacker, target, dmgStr, dmgType, spellName)
     if owner then
         recordSpellDamage(owner, dmg, true)
     else
-        recordSpellDamage(attacker, dmg, false)
+        local detected = tryAutoDetectPetOwner(attacker)
+        if detected then
+            recordSpellDamage(detected, dmg, true)
+        else
+            recordSpellDamage(attacker, dmg, false)
+        end
     end
 end
 
@@ -513,6 +588,8 @@ local function renderGUI()
         currentFight = nil
         fightHistory = {}
         animState = {}
+        petAssignments = {}
+        autoDetectCache = {}
     end
     ImGui.SameLine(0, 10)
     if ImGui.SmallButton("End Fight") then
@@ -617,6 +694,60 @@ local function renderGUI()
             dl:AddText(ImVec2(cx + barMax - textW - 4, cy + 1), textCol, rightText)
 
             ImGui.Dummy(barMax, BAR_HEIGHT + 2)
+
+            -- Tooltip: show assigned pets on hover
+            if ImGui.IsItemHovered() then
+                local assignedPets = getAssignedPets(entry.name)
+                if #assignedPets > 0 then
+                    ImGui.BeginTooltip()
+                    ImGui.Text("Includes pets:")
+                    for _, pn in ipairs(assignedPets) do
+                        ImGui.Text("  " .. pn)
+                    end
+                    ImGui.EndTooltip()
+                end
+            end
+
+            -- Right-click context menu for pet assignment
+            if ImGui.BeginPopupContextItem("##petmenu_" .. entry.name) then
+                ImGui.PushStyleColor(ImGuiCol.Text, 0.36, 0.76, 0.91, 1.0)
+                ImGui.Text(entry.name)
+                ImGui.PopStyleColor()
+                ImGui.Separator()
+
+                -- Check if this entry has an auto-detected owner suggestion
+                local suggestedOwner = autoDetectCache[entry.name]
+                if suggestedOwner and suggestedOwner ~= false and not petAssignments[entry.name] then
+                    if ImGui.MenuItem("Auto-detected: assign to " .. suggestedOwner) then
+                        petAssignments[entry.name] = suggestedOwner
+                        if fight then mergePetIntoOwner(fight, entry.name, suggestedOwner) end
+                    end
+                    ImGui.Separator()
+                end
+
+                -- If already assigned, show unassign option
+                if petAssignments[entry.name] then
+                    if ImGui.MenuItem("Unassign from " .. petAssignments[entry.name]) then
+                        petAssignments[entry.name] = nil
+                        autoDetectCache[entry.name] = nil
+                    end
+                else
+                    -- Show all other players as assignment targets
+                    if ImGui.BeginMenu("Assign as pet of...") then
+                        for _, other in ipairs(sorted) do
+                            if other.name ~= entry.name and not petAssignments[other.name] then
+                                if ImGui.MenuItem(other.name) then
+                                    petAssignments[entry.name] = other.name
+                                    if fight then mergePetIntoOwner(fight, entry.name, other.name) end
+                                end
+                            end
+                        end
+                        ImGui.EndMenu()
+                    end
+                end
+
+                ImGui.EndPopup()
+            end
         end
     end
 
@@ -736,6 +867,8 @@ local function cmdReset()
     currentFight = nil
     fightHistory = {}
     animState = {}
+    petAssignments = {}
+    autoDetectCache = {}
     print("\ay[DPS Parser]\ax All data cleared.")
 end
 
